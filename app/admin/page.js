@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import ImageLightbox from "@/components/ImageLightbox";
 
 // 단계 정의 (컬럼명 ↔ 라벨). 학생별 상세 뱃지와 전체 통계 대시보드가 공유한다.
 const STAGE_DEFS = [
@@ -25,7 +24,7 @@ const RESET_STUDENT_FIELDS = {
   preview_started: false,
   pwa_downloaded: false,
   final_url: null,
-  install_screenshot_url: null,
+  ...Object.fromEntries(STAGE_DEFS.map((stage) => [`${stage.key}_at`, null])),
   business_name: null,
   product: null,
   target_customer: null,
@@ -55,20 +54,26 @@ function orderStudents(students) {
 function StageDashboard({ students }) {
   const total = students.length;
 
-  // 링 차트와 막대그래프가 같은 통계를 공유한다.
   const stageStats = STAGE_DEFS.map((stage) => {
-    const done = students.filter((s) => !!s[stage.key]).length;
+    // 완료 시각 오름차순(먼저 끝낸 사람이 왼쪽). 시각 기록이 없으면 맨 뒤, 동률은 등록 순서 유지.
+    const doneStudents = students
+      .filter((s) => !!s[stage.key])
+      .sort((a, b) => {
+        const ta = a[`${stage.key}_at`] ? Date.parse(a[`${stage.key}_at`]) : Infinity;
+        const tb = b[`${stage.key}_at`] ? Date.parse(b[`${stage.key}_at`]) : Infinity;
+        if (ta === tb) return 0;
+        return ta < tb ? -1 : 1;
+      });
+    const done = doneStudents.length;
     const pct = total ? Math.round((done / total) * 100) : 0;
-    return { ...stage, done, pct };
+    return { ...stage, done, pct, doneStudents };
   });
 
-  // 수강생 행의 이름 칸도 동일한 w-40으로 고정했기 때문에(원래는 텍스트 길이만큼 늘어나는 가변폭이었음),
-  // 여기서 같은 폭(이름 칸 w-40 + mr-5, 단계 칸 w-28, gap-3)의 스페이서를 써야 막대가 배지와 정확히 정렬된다.
   return (
     <div className="brutal-card bg-brutal-white p-5 mb-8">
       <h2 className="text-xl font-black mb-6">📊 전체 진행 현황</h2>
-      <div className="flex items-end gap-3 h-48 border-b-4 border-brutal-black">
-        <div className="w-40 mr-5 shrink-0 self-center flex justify-center">
+      <div className="flex items-center gap-10">
+        <div className="shrink-0 flex justify-center">
           {/* 설치(바깥) → 최종 제출(안쪽) 순 6겹 링. 각 링은 실제 완료 비율만큼만 무지개색으로 채워지고,
               나머지는 회색 트랙(=100%)으로 남는다. -rotate-90으로 12시 방향에서 시작한다. */}
           <svg viewBox="0 0 100 100" className="w-36 h-36 -rotate-90" aria-hidden="true">
@@ -93,21 +98,28 @@ function StageDashboard({ students }) {
             })}
           </svg>
         </div>
-        {/* 막대만 가로 스크롤 (수강생 행의 단계 박스 스크롤과 정렬을 맞춘다) */}
-        <div className="flex items-end gap-3 h-full min-w-0 overflow-x-auto">
-          {stageStats.map((stage) => (
-            <div key={stage.key} className="w-28 shrink-0 h-full flex flex-col items-center">
-              <span className="font-black text-xs mb-1 whitespace-nowrap">
+        {/* 단계별 가로 막대: 회색 트랙 = 전체 인원(100%). 완료한 수강생마다 1/전체 폭의 칸(구분선 + 이름)이 색(링과 같은 색)으로 채워진다. */}
+        <div className="flex-1 min-w-0 flex flex-col gap-3">
+          {stageStats.map((stage, idx) => (
+            <div key={stage.key} className="flex items-center gap-3">
+              <span className="w-24 shrink-0 font-black text-sm whitespace-nowrap">
+                {idx + 1}. {stage.label}
+              </span>
+              <div className="flex flex-1 min-w-0 h-9 bg-brutal-gray border-2 border-brutal-black">
+                {stage.doneStudents.map((s) => (
+                  <div
+                    key={s.id}
+                    title={s.name}
+                    className="h-full min-w-0 flex items-center justify-center border-r-2 border-brutal-black last:border-r-0 px-0.5 transition-all duration-300"
+                    style={{ width: `${100 / total}%`, backgroundColor: RING_COLORS[idx] }}
+                  >
+                    <span className="font-black text-sm truncate">{s.name}</span>
+                  </div>
+                ))}
+              </div>
+              <span className="w-28 shrink-0 font-black text-sm text-right whitespace-nowrap">
                 {stage.done}/{total} ({stage.pct}%)
               </span>
-              {/* 회색 트랙 = 전체 인원(100%), 초록 채움 = 해당 단계 완료 인원 */}
-              <div className="relative w-full flex-1">
-                <div className="absolute inset-0 bg-brutal-gray" />
-                <div
-                  className="absolute bottom-0 left-0 w-full bg-brutal-green border-2 border-b-0 border-brutal-black transition-all duration-300"
-                  style={{ height: `${Math.max(stage.pct, 2)}%` }}
-                />
-              </div>
             </div>
           ))}
         </div>
@@ -174,7 +186,6 @@ export default function AdminPage() {
 
   const [students, setStudents] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [lightboxUrl, setLightboxUrl] = useState(null); // 설치 화면 캡쳐 모달
 
   // 로그인 세션 확인 및 변경 감지
   useEffect(() => {
@@ -400,14 +411,6 @@ export default function AdminPage() {
                           🔗 사이트 이동
                         </a>
                       )}
-                      {student.install_screenshot_url && (
-                        <button
-                          onClick={() => setLightboxUrl(student.install_screenshot_url)}
-                          className="brutal-btn bg-brutal-purple px-4 py-2 text-xs font-black shrink-0 whitespace-nowrap"
-                        >
-                          📸 설치화면
-                        </button>
-                      )}
                     </div>
                   </div>
 
@@ -437,14 +440,6 @@ export default function AdminPage() {
           </div>
         )}
       </main>
-
-      {lightboxUrl && (
-        <ImageLightbox
-          url={lightboxUrl}
-          alt="수강생 설치 화면 캡쳐"
-          onClose={() => setLightboxUrl(null)}
-        />
-      )}
     </div>
   );
 }

@@ -156,9 +156,10 @@ export default function Home() {
   const handleGateConfirm = async (columnName, nextGate) => {
     setIsConfirmingGate(true);
     try {
+      const now = new Date().toISOString();
       await supabase
         .from("students")
-        .update({ [columnName]: true, updated_at: new Date().toISOString() })
+        .update({ [columnName]: true, [`${columnName}_at`]: now, updated_at: now })
         .eq("id", selectedStudent.id);
     } catch (err) {
       // Supabase 연동이 안 되어 있어도 수업 진행에는 지장 없도록 조용히 넘어감

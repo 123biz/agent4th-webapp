@@ -47,7 +47,7 @@ function PreviewContent() {
     if (studentId) {
       supabase
         .from("students")
-        .update({ preview_started: true, updated_at: new Date().toISOString() })
+        .update({ preview_started: true, preview_started_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq("id", studentId)
         .then(() => {});
     }
@@ -90,7 +90,7 @@ function PreviewContent() {
     try {
       await supabase
         .from("students")
-        .update({ final_url: finalUrl.trim(), updated_at: new Date().toISOString() })
+        .update({ final_url: finalUrl.trim(), final_url_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq("id", studentId);
       setUrlSubmitted(true);
     } catch (err) {
@@ -132,7 +132,7 @@ function PreviewContent() {
     if (studentId) {
       supabase
         .from("students")
-        .update({ pwa_downloaded: true, updated_at: new Date().toISOString() })
+        .update({ pwa_downloaded: true, pwa_downloaded_at: new Date().toISOString(), updated_at: new Date().toISOString() })
         .eq("id", studentId)
         .then(() => {});
     }
