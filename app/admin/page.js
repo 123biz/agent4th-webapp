@@ -41,6 +41,12 @@ const RING_COLORS = [
   "var(--color-brutal-purple)",
 ];
 
+// 가로 막대에서 수강생별로 고정되는 색 (명단 순서 기준, 12명 초과 시 순환)
+const STUDENT_COLORS = [
+  "#FF6B6B", "#FFA94D", "#FFE156", "#7BED9F", "#6EC6FF", "#B197FC",
+  "#FF6B9D", "#38D9A9", "#74C0FC", "#F783AC", "#C0EB75", "#E599F7",
+];
+
 // '관리자' 계정이 명단에 있으면 맨 위로 올린다 (나머지는 id 정렬 순서 유지 — sort는 안정 정렬)
 function orderStudents(students) {
   return [...students].sort((a, b) => {
@@ -53,6 +59,9 @@ function orderStudents(students) {
 // 전체 수강생 기준, 각 단계를 완료한 인원 수/비율로 진행 현황을 보여주는 대시보드
 function StageDashboard({ students }) {
   const total = students.length;
+  const studentColor = new Map(
+    students.map((s, i) => [s.id, STUDENT_COLORS[i % STUDENT_COLORS.length]])
+  );
 
   const stageStats = STAGE_DEFS.map((stage) => {
     // 완료 시각 오름차순(먼저 끝낸 사람이 왼쪽). 시각 기록이 없으면 맨 뒤, 동률은 등록 순서 유지.
@@ -98,7 +107,7 @@ function StageDashboard({ students }) {
             })}
           </svg>
         </div>
-        {/* 단계별 가로 막대: 회색 트랙 = 전체 인원(100%). 완료한 수강생마다 1/전체 폭의 칸(구분선 + 이름)이 색(링과 같은 색)으로 채워진다. */}
+        {/* 단계별 가로 막대: 회색 트랙 = 전체 인원(100%). 완료한 수강생마다 1/전체 폭의 칸(구분선 + 이름)이 수강생 고유 색으로 채워진다. */}
         <div className="flex-1 min-w-0 flex flex-col gap-3">
           {stageStats.map((stage, idx) => (
             <div key={stage.key} className="flex items-center gap-3">
@@ -111,7 +120,7 @@ function StageDashboard({ students }) {
                     key={s.id}
                     title={s.name}
                     className="h-full min-w-0 flex items-center justify-center border-r-2 border-brutal-black last:border-r-0 px-0.5 transition-all duration-300"
-                    style={{ width: `${100 / total}%`, backgroundColor: RING_COLORS[idx] }}
+                    style={{ width: `${100 / total}%`, backgroundColor: studentColor.get(s.id) }}
                   >
                     <span className="font-black text-sm truncate">{s.name}</span>
                   </div>
