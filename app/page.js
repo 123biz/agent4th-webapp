@@ -177,7 +177,7 @@ export default function Home() {
   return (
     <div className="h-screen overflow-hidden bg-brutal-cream flex flex-col">
       {/* 상단 로고/헤더 */}
-      <header className="w-full px-4 md:px-8 pt-4 pb-4 shrink-0 sticky top-0 z-20 bg-brutal-cream">
+      <header className="w-full px-4 md:px-8 pt-4 pb-4 shrink-0 bg-brutal-cream">
         <div className="flex items-center justify-between gap-4">
           {/* 좌측: 로고 */}
           <div className="flex-1 min-w-0">
@@ -232,7 +232,7 @@ export default function Home() {
       <>
       {/* Step 0: 수강생 선택 화면 */}
       {currentStep === 0 && gateStep === null && (
-        <div className="flex-1 min-h-0 w-full px-4 md:px-6 pb-4 grid grid-cols-1 md:grid-cols-[320px_1fr_300px] md:grid-rows-[minmax(0,1fr)] gap-4">
+        <div className="flex-1 min-h-0 w-full px-4 md:px-6 pb-8 grid grid-cols-1 md:grid-cols-[320px_1fr_300px] md:grid-rows-[minmax(0,1fr)] gap-4">
           <CourseRoadmap />
 
           <main className="h-full min-h-0 mt-8 overflow-y-auto animate-slide-in-up">
@@ -453,6 +453,11 @@ export default function Home() {
       </>
       )}
       </div>
+
+      {/* 하단 푸터 */}
+      <footer className="w-full px-4 md:px-8 py-2 shrink-0 text-center text-xs md:text-sm font-bold text-brutal-black/50">
+        Copyright © 2026 주식회사 에이아이캠프. All rights reserved.
+      </footer>
     </div>
   );
 }
