@@ -1,35 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-
-// 단계 정의 (컬럼명 ↔ 라벨). 학생별 상세 뱃지와 전체 통계 대시보드가 공유한다.
-const STAGE_DEFS = [
-  { key: "antigravity_installed", label: "설치" },
-  { key: "netlify_signed_up", label: "가입" },
-  { key: "preview_started", label: "제작중" },
-  { key: "pwa_downloaded", label: "다운로드" },
-  { key: "final_url", label: "최종 제출" },
-];
+import { STAGE_DEFS, RESET_STUDENT_FIELDS, resetStudentProgress } from "@/lib/studentProgress";
+import { fetchTeacherClasses, createClass, closeClass, extendClass, isExpired } from "@/lib/classes";
 
 // 학생 데이터로부터 단계별 완료 여부를 계산 (별도 stage 컬럼 없이 파생)
 function getStages(student) {
   return STAGE_DEFS.map((stage) => ({ label: stage.label, done: !!student[stage.key] }));
 }
-
-// 초기화 버튼을 누르면 되돌아가는 값들: 진행 단계 플래그 + 4문항 저장값. is_active(활성 상태)는 건드리지 않는다.
-const RESET_STUDENT_FIELDS = {
-  antigravity_installed: false,
-  netlify_signed_up: false,
-  preview_started: false,
-  pwa_downloaded: false,
-  final_url: null,
-  ...Object.fromEntries(STAGE_DEFS.map((stage) => [`${stage.key}_at`, null])),
-  business_name: null,
-  product: null,
-  target_customer: null,
-  brand_color: null,
-};
 
 // 링 차트 반지름(바깥 = 설치 ~ 안쪽 = 최종 제출)과 무지개 배색
 const RING_RADII = [44, 35, 26, 17, 8];
@@ -137,21 +116,48 @@ function StageDashboard({ students }) {
   );
 }
 
+// 이메일만 기억한다. 비밀번호는 저장하지 않는다.
+const REMEMBERED_EMAIL_KEY = "admin-remembered-email";
+
 function LoginForm({ onSubmit, error, isSubmitting }) {
-  const [email, setEmail] = useState("ceo@aicamp.club");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberEmail, setRememberEmail] = useState(true);
+  const passwordRef = useRef(null);
+
+  // 정적 내보내기라 빌드 시점에는 localStorage가 없다. 렌더 이후에 읽는다.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+      if (saved) {
+        // 정적 내보내기라 렌더 중에는 localStorage를 못 읽는다. 렌더 중 읽으면
+        // 빌드 시점에 터지거나 hydration 불일치가 나므로 마운트 후 한 번만 채운다.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setEmail(saved);
+        passwordRef.current?.focus();
+      }
+    } catch (err) {
+      // 시크릿 모드 등 저장소를 못 쓰는 환경 — 기억 기능만 건너뛴다
+    }
+  }, []);
 
   return (
     <main className="mt-24 px-4">
       <div className="text-center mb-10">
         <p className="text-4xl md:text-5xl font-black tracking-tighter whitespace-nowrap">🚀 Antigravity</p>
         <p className="text-3xl md:text-4xl font-black text-brutal-pink mt-6 whitespace-nowrap">
-          스타트업 대시보드 - 2시간 완성 비즈니스 앱 관제탑
+          우주선 건조소 관제탑
         </p>
       </div>
       <form
         onSubmit={(e) => {
           e.preventDefault();
+          try {
+            if (rememberEmail) localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+            else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+          } catch (err) {
+            // 저장에 실패해도 로그인 자체는 막지 않는다
+          }
           onSubmit(email, password);
         }}
         className="brutal-card bg-brutal-white p-8 flex flex-col gap-4 max-w-sm mx-auto"
@@ -160,20 +166,34 @@ function LoginForm({ onSubmit, error, isSubmitting }) {
         <input
           type="email"
           required
+          autoFocus
+          autoComplete="username"
           placeholder="이메일"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="brutal-input px-4 py-3 text-lg"
         />
         <input
+          ref={passwordRef}
           type="password"
           required
-          autoFocus
+          autoComplete="current-password"
           placeholder="비밀번호"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="brutal-input px-4 py-3 text-lg"
         />
+
+        <label className="flex items-center gap-3 font-bold text-base cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={rememberEmail}
+            onChange={(e) => setRememberEmail(e.target.checked)}
+            className="w-6 h-6 accent-brutal-black border-4 border-brutal-black cursor-pointer"
+          />
+          이메일 기억하기
+        </label>
+
         {error && <p className="text-red-600 font-semibold text-sm">{error}</p>}
         <button
           type="submit"
@@ -189,6 +209,8 @@ function LoginForm({ onSubmit, error, isSubmitting }) {
 
 export default function AdminPage() {
   const [session, setSession] = useState(null);
+  const [classes, setClasses] = useState([]);
+  const [activeClassCode, setActiveClassCode] = useState(null); // 지금 보고 있는 수업
   const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [loginError, setLoginError] = useState(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
@@ -234,6 +256,68 @@ export default function AdminPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+  };
+
+  // 내가 만든 수업 목록 (다른 강사 수업은 보이지 않는다)
+  useEffect(() => {
+    if (!session?.user?.email) return;
+
+    fetchTeacherClasses(session.user.email).then(({ classes: rows }) => {
+      setClasses(rows);
+      setActiveClassCode((prev) => prev ?? rows[0]?.code ?? null);
+    });
+  }, [session]);
+
+  const activeClass = classes.find((row) => row.code === activeClassCode) ?? null;
+
+  // 선택한 수업의 수강생만 — 명단·통계·카운트가 모두 이 배열을 쓴다
+  const classStudents = activeClassCode
+    ? students.filter((student) => student.class_code === activeClassCode)
+    : students;
+
+  const handleCreateClass = async () => {
+    const label = window.prompt("수업 이름을 입력해 주세요.\n(수강생 화면에 그대로 보입니다)");
+    if (!label?.trim()) return;
+
+    const { newClass, error } = await createClass({
+      teacherEmail: session.user.email,
+      label: label.trim(),
+    });
+
+    if (error || !newClass) {
+      window.alert(`수업 개설에 실패했어요.\n\n${error?.message || "알 수 없는 오류"}`);
+      return;
+    }
+
+    setClasses((prev) => [newClass, ...prev]);
+    setActiveClassCode(newClass.code);
+  };
+
+  // 수업 마감 / 다시 열기 — 등록만 막을 뿐 수강생 기록은 그대로 남는다
+  const handleToggleClassOpen = async (classRow) => {
+    const willClose = !isExpired(classRow);
+
+    if (willClose) {
+      const confirmed = window.confirm(
+        `'${classRow.label || classRow.code}' 수업을 지금 마감할까요?\n` +
+          `수강생 화면의 수업 목록에서 사라져 더 이상 등록할 수 없습니다.\n` +
+          `이미 등록한 수강생의 기록은 그대로 남습니다.`
+      );
+      if (!confirmed) return;
+    }
+
+    const { expiresAt, error } = willClose
+      ? await closeClass(classRow.code)
+      : await extendClass(classRow.code, 12);
+
+    if (error) {
+      window.alert(`변경에 실패했어요.\n\n${error.message}`);
+      return;
+    }
+
+    setClasses((prev) =>
+      prev.map((row) => (row.code === classRow.code ? { ...row, expires_at: expiresAt } : row))
+    );
   };
 
   // 로그인 상태일 때만 수강생 데이터 조회 및 실시간 구독
@@ -307,10 +391,7 @@ export default function AdminPage() {
       prev.map((s) => (s.id === student.id ? { ...s, ...RESET_STUDENT_FIELDS } : s))
     );
 
-    const { error } = await supabase
-      .from("students")
-      .update({ ...RESET_STUDENT_FIELDS, updated_at: new Date().toISOString() })
-      .eq("id", student.id);
+    const { error } = await resetStudentProgress(student.id);
 
     if (error) {
       // 저장 실패 시 되돌림
@@ -328,43 +409,100 @@ export default function AdminPage() {
 
   if (!session) {
     return (
-      <div className="min-h-screen bg-brutal-cream py-10 px-4">
-        <LoginForm onSubmit={handleLogin} error={loginError} isSubmitting={isLoggingIn} />
+      <div className="min-h-screen bg-brutal-cream py-10 px-4 flex flex-col">
+        <div className="flex-1">
+          <LoginForm onSubmit={handleLogin} error={loginError} isSubmitting={isLoggingIn} />
+        </div>
+
+        {/* 하단 푸터 */}
+        <footer className="w-full pt-10 shrink-0 text-center text-xs md:text-sm font-bold text-brutal-black/50">
+          Copyright © 2026 주식회사 에이아이캠프. All rights reserved.
+        </footer>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-brutal-cream py-10 px-12 md:px-24">
-      <header className="mb-10 flex items-center justify-between">
-        <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-brutal-pink">🚀 스타트업 대시보드 관제탑</h1>
-        <div className="flex items-center gap-3">
-          <div className="brutal-card bg-brutal-white w-32 px-4 py-2 font-bold text-sm text-center whitespace-nowrap">
-            수강생 {students.length}명
+      {/* 헤더 + 전체 진행 현황을 한 덩어리로 상단 고정 (둘을 묶으면 top 오프셋 계산이 필요 없다) */}
+      <div className="sticky top-0 z-20 bg-brutal-cream pt-10 -mt-10 pb-2">
+        <header className="mb-10 flex items-center justify-between">
+          <h1 className="text-3xl md:text-4xl font-black tracking-tighter text-brutal-pink">🚀 우주선 건조소 관제탑</h1>
+          <div className="flex items-center gap-3">
+            <div className="brutal-card bg-brutal-white w-32 px-4 py-2 font-bold text-sm text-center whitespace-nowrap">
+              수강생 {classStudents.length}명
+            </div>
+            <div className="brutal-card bg-brutal-green w-32 px-4 py-2 font-bold text-sm text-center whitespace-nowrap">
+              활성 {classStudents.filter((s) => s.is_active).length}명
+            </div>
+            <div className="brutal-card bg-brutal-gray w-32 px-4 py-2 font-bold text-sm text-center whitespace-nowrap">
+              비활성 {classStudents.filter((s) => !s.is_active).length}명
+            </div>
+            <button
+              onClick={handleLogout}
+              className="brutal-btn brutal-btn-card-shadow bg-brutal-white px-4 py-2 text-sm whitespace-nowrap"
+            >
+              로그아웃
+            </button>
           </div>
-          <div className="brutal-card bg-brutal-green w-32 px-4 py-2 font-bold text-sm text-center whitespace-nowrap">
-            활성 {students.filter((s) => s.is_active).length}명
-          </div>
-          <div className="brutal-card bg-brutal-gray w-32 px-4 py-2 font-bold text-sm text-center whitespace-nowrap">
-            비활성 {students.filter((s) => !s.is_active).length}명
-          </div>
-          <button
-            onClick={handleLogout}
-            className="brutal-btn brutal-btn-card-shadow bg-brutal-white px-4 py-2 text-sm whitespace-nowrap"
+        </header>
+
+        {/* 수업(기수) 선택 — 다른 강사 수업은 목록에 없다. 수가 늘어도 폭이 일정하도록 드롭다운. */}
+        <div className="flex items-center gap-3 flex-wrap mb-6">
+          <label htmlFor="class-select" className="font-black text-base whitespace-nowrap">
+            🎓 강의 선택하기
+          </label>
+
+          <select
+            id="class-select"
+            value={activeClassCode ?? ""}
+            onChange={(e) => setActiveClassCode(e.target.value || null)}
+            className="brutal-input px-4 py-2 text-sm font-bold min-w-[18rem]"
           >
-            로그아웃
+            {classes.length === 0 && <option value="">개설된 수업이 없습니다</option>}
+            {classes.map((row) => (
+              <option key={row.code} value={row.code}>
+                {row.label || row.code} ({row.code}){isExpired(row) ? " — 마감됨" : ""}
+              </option>
+            ))}
+          </select>
+
+          {activeClass && (
+            <button
+              onClick={() => handleToggleClassOpen(activeClass)}
+              className={`brutal-btn px-4 py-2 text-sm font-bold whitespace-nowrap ${
+                isExpired(activeClass) ? "bg-brutal-blue" : "bg-brutal-white"
+              }`}
+            >
+              {isExpired(activeClass) ? "🔓 다시 열기" : "🔒 지금 마감"}
+            </button>
+          )}
+
+          {activeClass && (
+            <span className="font-bold text-sm text-brutal-black/60 whitespace-nowrap">
+              {isExpired(activeClass)
+                ? "수강생이 등록할 수 없는 상태입니다"
+                : "수강생이 등록할 수 있는 상태입니다"}
+            </span>
+          )}
+
+          <button
+            onClick={handleCreateClass}
+            className="brutal-btn bg-brutal-yellow px-4 py-2 text-sm font-bold whitespace-nowrap"
+          >
+            ➕ 새 수업 개설
           </button>
         </div>
-      </header>
+
+        {!isLoading && <StageDashboard students={classStudents} />}
+      </div>
 
       <main className="w-full">
-        {!isLoading && <StageDashboard students={students} />}
-
         {isLoading ? (
           <p className="font-semibold text-lg">불러오는 중...</p>
         ) : (
           <div className="flex flex-col gap-4">
-            {orderStudents(students).map((student) => (
+            {orderStudents(classStudents).map((student) => (
               <div
                 key={student.id}
                 className={`brutal-card p-5 flex flex-col gap-3 ${
@@ -449,6 +587,11 @@ export default function AdminPage() {
           </div>
         )}
       </main>
+
+      {/* 하단 푸터 */}
+      <footer className="w-full pt-10 text-center text-xs md:text-sm font-bold text-brutal-black/50">
+        Copyright © 2026 주식회사 에이아이캠프. All rights reserved.
+      </footer>
     </div>
   );
 }

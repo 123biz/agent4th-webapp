@@ -5,7 +5,7 @@
  */
 export default function PreviewFrame({ code }) {
   return (
-    <div className="w-full h-full min-h-[600px] border-4 border-brutal-black brutal-shadow-lg bg-brutal-white relative overflow-hidden">
+    <div className="w-full h-full min-h-[600px] md:min-h-0 border-4 border-brutal-black brutal-shadow-lg bg-brutal-white relative overflow-hidden">
       {/* 브라우저 상단 탭 모양 (장식) */}
       <div className="h-10 bg-brutal-black flex items-center px-4 gap-2">
         <div className="w-3 h-3 rounded-full bg-brutal-red"></div>
