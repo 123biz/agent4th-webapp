@@ -59,7 +59,7 @@ function StageDashboard({ students }) {
 
   return (
     <div className="brutal-card bg-brutal-white p-5 mb-8">
-      <h2 className="text-xl font-black mb-6">📊 전체 진행 현황</h2>
+      <h2 className="text-xl font-black mb-6">📊 전체 진행 현황 Dashboard</h2>
       <div className="flex items-center gap-10">
         <div className="shrink-0 flex justify-center">
           {/* 설치(바깥) → 최종 제출(안쪽) 순 6겹 링. 각 링은 실제 완료 비율만큼만 무지개색으로 채워지고,
