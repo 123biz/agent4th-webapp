@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { maskName, validateName } from "@/lib/maskName";
+import { maskName, validateName, filterNameInput, hasBlockedChars } from "@/lib/maskName";
 import ClassPicker from "@/components/ClassPicker";
 
 /**
@@ -55,7 +55,10 @@ export default function StudentRegisterForm({ selectedClass, onSelectClass, onCl
         .maybeSingle();
 
       if (existing) {
-        setError(`'${masked}'님은 이미 등록되어 있어요. 시작하기에서 선택해 주세요.`);
+        setError(
+          `'${masked}'님은 이미 등록되어 있어요. 본인이면 시작하기에서 선택하시고, ` +
+            `동명이인이면 이름 뒤에 숫자를 붙여 주세요. (예: ${maskName(rawName + "2")})`
+        );
         return;
       }
 
@@ -99,10 +102,18 @@ export default function StudentRegisterForm({ selectedClass, onSelectClass, onCl
           <input
             type="text"
             autoFocus
+            lang="ko"
             value={rawName}
             onChange={(e) => {
-              setRawName(e.target.value);
-              setError("");
+              const typed = e.target.value;
+              // 한글 아닌 글자는 칸에 쌓이지 않게 즉시 걸러낸다.
+              // 지울 게 없어야 한/영 키만 누르고 바로 다시 칠 수 있다.
+              setRawName(filterNameInput(typed));
+              setError(
+                hasBlockedChars(typed)
+                  ? "⌨️ 한/영 키를 확인해 주세요. 한글만 입력할 수 있어요."
+                  : ""
+              );
             }}
             placeholder="예) 홍길동"
             className="brutal-input w-full px-5 py-4 text-2xl font-black"
