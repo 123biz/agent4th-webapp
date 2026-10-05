@@ -241,13 +241,19 @@ export default function AdminPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [students, setStudents] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // 수업 목록을 받아오기 전에는 수강생을 조회하지 않는다 (빈 명단이 잠깐 보이는 것을 막는다)
+  const [isClassesLoaded, setIsClassesLoaded] = useState(false);
+  const [isStudentsLoaded, setIsStudentsLoaded] = useState(false);
+
+  // 계정이 바뀌었는지 비교할 기준. state로 두면 리스너가 낡은 값을 보게 되므로 ref를 쓴다.
+  const currentUserIdRef = useRef(null);
 
   // 로그인 세션 확인 및 변경 감지
   useEffect(() => {
     supabase.auth
       .getSession()
       .then(({ data }) => {
+        currentUserIdRef.current = data.session?.user?.id ?? null;
         setSession(data.session);
       })
       .catch((err) => {
@@ -259,6 +265,19 @@ export default function AdminPage() {
       });
 
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      const nextUserId = newSession?.user?.id ?? null;
+
+      // 이 컴포넌트는 로그아웃해도 언마운트되지 않는다. 직접 비우지 않으면 이전 강사의
+      // 수강생/수업/선택된 수업이 그대로 남아, 다음 사람이 로그인할 때 남의 명단이 보인다.
+      if (currentUserIdRef.current !== nextUserId) {
+        setStudents([]);
+        setClasses([]);
+        setActiveClassCode(null);
+        setIsClassesLoaded(false);
+        setIsStudentsLoaded(false);
+      }
+
+      currentUserIdRef.current = nextUserId;
       setSession(newSession);
     });
 
@@ -289,11 +308,18 @@ export default function AdminPage() {
 
     fetchTeacherClasses(session.user.email).then(({ classes: rows }) => {
       setClasses(rows);
-      setActiveClassCode((prev) => prev ?? rows[0]?.code ?? null);
+      // 내 수업 목록에 없는 코드(이전 강사가 보던 수업 등)는 버리고 첫 수업으로 되돌린다
+      setActiveClassCode((prev) =>
+        rows.some((row) => row.code === prev) ? prev : (rows[0]?.code ?? null)
+      );
+      setIsClassesLoaded(true);
     });
   }, [session]);
 
   const activeClass = classes.find((row) => row.code === activeClassCode) ?? null;
+
+  // 아직 기다려야 할 조회가 남았는지. 수업이 없는 강사는 조회할 것이 없으니 바로 끝난 상태다.
+  const isLoading = !isClassesLoaded || (classes.length > 0 && !isStudentsLoaded);
 
   // 선택한 수업의 수강생만 — 명단·통계·카운트가 모두 이 배열을 쓴다
   // 수업이 하나도 없는 강사(새로 초대된 계정)에게는 아무도 보이면 안 되므로 빈 배열이다.
@@ -346,14 +372,28 @@ export default function AdminPage() {
     );
   };
 
-  // 로그인 상태일 때만 수강생 데이터 조회 및 실시간 구독
+  // 내 수업 코드 목록. 배열을 그대로 의존성에 쓰면 매 렌더마다 새 배열이라
+  // 아래 effect가 불필요하게 재구독하므로, 내용이 바뀔 때만 변하는 문자열로 만든다.
+  const classCodeKey = classes.map((row) => row.code).join(",");
+
+  // 내 수업에 속한 수강생만 조회 및 실시간 구독
   useEffect(() => {
-    if (!session) return;
+    if (!session || !isClassesLoaded) return;
+
+    const myCodes = classCodeKey ? classCodeKey.split(",") : [];
+
+    // 수업이 하나도 없는 강사(새로 초대된 계정)는 조회도 구독도 하지 않는다.
+    // students 는 로그아웃 때 비워지고 activeClassCode 도 null 이므로 아무도 보이지 않는다.
+    if (myCodes.length === 0) return;
 
     async function fetchAll() {
-      const { data } = await supabase.from("students").select("*").order("id");
+      const { data } = await supabase
+        .from("students")
+        .select("*")
+        .in("class_code", myCodes)
+        .order("id");
       setStudents(data || []);
-      setIsLoading(false);
+      setIsStudentsLoaded(true);
     }
     fetchAll();
 
@@ -363,6 +403,9 @@ export default function AdminPage() {
         "postgres_changes",
         { event: "*", schema: "public", table: "students" },
         (payload) => {
+          // 남의 수업 변경은 무시한다 (RLS로도 막히지만 화면 쪽에서 한 번 더 확인한다)
+          if (payload.eventType !== "DELETE" && !myCodes.includes(payload.new.class_code)) return;
+
           setStudents((prev) => {
             if (payload.eventType === "DELETE") {
               return prev.filter((s) => s.id !== payload.old.id);
@@ -380,7 +423,7 @@ export default function AdminPage() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [session]);
+  }, [session, isClassesLoaded, classCodeKey]);
 
   const toggleActive = async (student) => {
     const nextValue = !student.is_active;
