@@ -124,6 +124,22 @@ function LoginForm({ onSubmit, error, isSubmitting }) {
   const [password, setPassword] = useState("");
   const [rememberEmail, setRememberEmail] = useState(true);
   const passwordRef = useRef(null);
+  const [resetMessage, setResetMessage] = useState(null);
+  const [isResetting, setIsResetting] = useState(false);
+
+  // 비밀번호 재설정 메일 발송. 가입 여부는 노출하지 않으려고 결과와 무관하게 같은 문구를 보여준다.
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setResetMessage("위에 이메일을 먼저 입력해 주세요.");
+      return;
+    }
+    setIsResetting(true);
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/invite/callback`,
+    });
+    setIsResetting(false);
+    setResetMessage("가입된 이메일이라면 비밀번호 재설정 메일을 보냈습니다. 메일함을 확인해 주세요.");
+  };
 
   // 정적 내보내기라 빌드 시점에는 localStorage가 없다. 렌더 이후에 읽는다.
   useEffect(() => {
@@ -202,6 +218,15 @@ function LoginForm({ onSubmit, error, isSubmitting }) {
         >
           {isSubmitting ? "로그인 중..." : "로그인"}
         </button>
+        <button
+          type="button"
+          onClick={handleForgotPassword}
+          disabled={isResetting}
+          className="font-bold text-sm underline text-brutal-black/70 self-center"
+        >
+          {isResetting ? "메일 보내는 중..." : "비밀번호를 잊으셨나요?"}
+        </button>
+        {resetMessage && <p className="font-semibold text-sm text-center">{resetMessage}</p>}
       </form>
     </main>
   );
