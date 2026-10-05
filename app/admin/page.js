@@ -296,9 +296,10 @@ export default function AdminPage() {
   const activeClass = classes.find((row) => row.code === activeClassCode) ?? null;
 
   // 선택한 수업의 수강생만 — 명단·통계·카운트가 모두 이 배열을 쓴다
+  // 수업이 하나도 없는 강사(새로 초대된 계정)에게는 아무도 보이면 안 되므로 빈 배열이다.
   const classStudents = activeClassCode
     ? students.filter((student) => student.class_code === activeClassCode)
-    : students;
+    : [];
 
   const handleCreateClass = async () => {
     const label = window.prompt("수업 이름을 입력해 주세요.\n(수강생 화면에 그대로 보입니다)");
