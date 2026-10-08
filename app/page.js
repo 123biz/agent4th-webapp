@@ -337,8 +337,8 @@ export default function Home() {
 
         {!selectedStudent && (
           <div className="flex justify-center mt-3">
-            <p className="inline-block bg-brutal-yellow border-4 border-brutal-black brutal-shadow-sm px-6 py-2 font-black text-base md:text-lg text-brutal-black">
-              <span className="mr-2">2026-09-06</span>AI에이전트 3기 4회차(홍용기 박사) 강의 노트
+            <p className="inline-block bg-brutal-yellow border-4 border-brutal-black brutal-shadow-sm px-6 py-3 font-black text-xl md:text-3xl text-brutal-black">
+              AI 에이전트 4기 홍용기 박사 강의 노트
             </p>
           </div>
         )}
