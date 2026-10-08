@@ -300,6 +300,10 @@ export default function AdminPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    // 다음에 로그인하는 강사에게 이전 강사의 수업·수강생이 남아 보이지 않도록 비운다
+    setClasses([]);
+    setActiveClassCode(null);
+    setStudents([]);
   };
 
   // 내가 만든 수업 목록 (다른 강사 수업은 보이지 않는다)
