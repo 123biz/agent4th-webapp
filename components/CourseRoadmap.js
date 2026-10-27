@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { courseRoadmap } from "@/lib/courseRoadmap";
 
@@ -107,25 +106,46 @@ export default function CourseRoadmap() {
             <div className="font-black text-3xl mb-2">{topic.label}</div>
             <p className="text-xl font-semibold mb-4 opacity-90">{topic.desc}</p>
 
-            {topic.id === "ai-ecosystem" && (
-              <Image
-                src="/aiecosystem.webp"
-                alt="AI Ecosystem 5가지 유형"
-                width={1000}
-                height={600}
-                className="w-full h-auto mb-4 border-2 border-brutal-black"
-              />
+            {topic.id === "ai-ecosystem" ? (
+              <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4 text-brutal-black">
+                {topic.children.map((child) => (
+                  <div key={child.label} className="border-4 border-brutal-black bg-brutal-white flex flex-col">
+                    <div className="border-b-4 border-brutal-black px-4 py-3" style={{ backgroundColor: child.bg }}>
+                      <div className="font-black text-2xl leading-tight">{child.label}</div>
+                      <div className="text-lg font-bold opacity-70">{child.subtitle}</div>
+                    </div>
+                    <div className="p-4 flex flex-col gap-4">
+                      <div className="flex items-start gap-3">
+                        <span className="text-5xl leading-none shrink-0" aria-hidden="true">
+                          {child.icon}
+                        </span>
+                        <p className="text-lg font-semibold opacity-80">{child.desc}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {child.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className="border-2 border-brutal-black bg-brutal-cream px-2 py-1 text-base font-black"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {topic.children.map((child) => (
+                  <div key={child.label} className="border-2 border-brutal-black bg-brutal-white text-brutal-black p-4">
+                    <div className="font-black text-2xl mb-2">{child.label}</div>
+                    <div className="text-xl font-semibold opacity-80 whitespace-pre-line">{child.desc}</div>
+                    {child.note && <div className="mt-2 text-xl font-black text-blue-700">{child.note}</div>}
+                  </div>
+                ))}
+              </div>
             )}
-
-            <div className="flex flex-col gap-3">
-              {topic.children.map((child) => (
-                <div key={child.label} className="border-2 border-brutal-black bg-brutal-white text-brutal-black p-4">
-                  <div className="font-black text-2xl mb-2">{child.label}</div>
-                  <div className="text-xl font-semibold opacity-80 whitespace-pre-line">{child.desc}</div>
-                  {child.note && <div className="mt-2 text-xl font-black text-blue-700">{child.note}</div>}
-                </div>
-              ))}
-            </div>
           </section>
         ))}
       </div>
